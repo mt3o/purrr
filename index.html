@@ -125,6 +125,17 @@
 
   .ends{ display:flex; justify-content:space-between; font-size:.75rem; color:var(--ink-faint); margin-top:.36rem; }
 
+  .presets{ display:flex; flex-wrap:wrap; gap:.5rem; margin-bottom:1.25rem; }
+  .preset-btn{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    font-size:.78rem; color:var(--ink-dim);
+    background:rgba(255,255,255,0.04); border:1px solid var(--line);
+    border-radius:999px; padding:.4rem .85rem; cursor:pointer;
+    transition:border-color .15s,color .15s,background .15s;
+  }
+  .preset-btn:hover{ color:var(--ink); border-color:var(--accent-soft); background:rgba(232,167,107,0.08); }
+  .preset-btn:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+
   .footnote{
     display:flex; gap:.6rem; margin-top:1.8rem;
     font-size:.79rem; color:var(--ink-faint); line-height:1.5;
@@ -163,10 +174,23 @@
     <div class="group">
       <div class="group-name">Miks i przestrzeń</div>
 
+      <div class="presets" id="presetRow">
+        <button type="button" class="preset-btn" data-cat="60" data-rain="5">Cichy kot</button>
+        <button type="button" class="preset-btn" data-cat="95" data-rain="12">Głośne mruczenie</button>
+        <button type="button" class="preset-btn" data-cat="10" data-rain="55">Lekki deszcz</button>
+        <button type="button" class="preset-btn" data-cat="5" data-rain="95">Ulewa</button>
+        <button type="button" class="preset-btn" data-cat="60" data-rain="60">Równowaga</button>
+        <button type="button" class="preset-btn" data-cat="40" data-rain="80">Deszcz z kotem</button>
+      </div>
+
       <div class="control">
-        <div class="control-label"><span>Kot ↔ Deszcz</span><span class="val" id="mixVal">50 / 50</span></div>
-        <input type="range" id="mixSlider" min="0" max="100" value="50">
-        <div class="ends"><span>mruczenie</span><span>deszcz</span></div>
+        <div class="control-label"><span>Kot</span><span class="val" id="catVolVal">70%</span></div>
+        <input type="range" id="catVolSlider" min="0" max="100" value="70">
+      </div>
+
+      <div class="control">
+        <div class="control-label"><span>Deszcz</span><span class="val" id="rainVolVal">70%</span></div>
+        <input type="range" id="rainVolSlider" min="0" max="100" value="70">
       </div>
 
       <div class="control">
@@ -232,6 +256,8 @@
   </div>
 </div>
 
+<audio id="bgSink" playsinline style="display:none"></audio>
+
 <script>
 (function(){
   'use strict';
@@ -253,8 +279,10 @@
   const playBtn   = el('playBtn');
   const orbIcon   = el('orbIcon');
   const stateText = el('stateText');
+  const bgSink    = el('bgSink');
 
-  const mixSlider   = el('mixSlider');
+  const catVolSlider  = el('catVolSlider');
+  const rainVolSlider = el('rainVolSlider');
   const panSlider   = el('panSlider');
   const depthSlider = el('depthSlider');
   const shapeSlider = el('shapeSlider');
@@ -546,7 +574,9 @@
 
   function schedulePurr(){
     if(!ctx || !purrCycles.length) return;
-    const lookahead = 0.35;
+    // Generous margin: background tabs can throttle setInterval down to
+    // ~1/s, so each tick needs enough lookahead to keep the timeline full.
+    const lookahead = 1.2;
     while(purrNextTime < ctx.currentTime + lookahead){
       const buf = purrCycles[(Math.random()*purrCycles.length)|0];
       const src = ctx.createBufferSource();
@@ -650,7 +680,19 @@
 
     nodes.master = ctx.createGain();
     nodes.master.gain.value = parseFloat(volSlider.value)/100;
-    nodes.master.connect(ctx.destination);
+
+    // Route through a real <audio> element rather than straight to the
+    // hardware sink: browsers exempt tabs playing through a media element
+    // from background-tab timer throttling and allow lock-screen/minimized
+    // playback, which a bare AudioContext does not get.
+    if(typeof ctx.createMediaStreamDestination === 'function'){
+      nodes.streamDest = ctx.createMediaStreamDestination();
+      nodes.master.connect(nodes.streamDest);
+      bgSink.srcObject = nodes.streamDest.stream;
+      bgSink.play().catch(() => {});
+    } else {
+      nodes.master.connect(ctx.destination);
+    }
 
     // panner carries the cat and the droplets only — the rain bed stays put
     nodes.panner = ctx.createStereoPanner();
@@ -753,9 +795,9 @@
 
   function applyMix(){
     if(!ctx) return;
-    const t = parseFloat(mixSlider.value)/100;   // 0 cat .. 1 rain
-    nodes.catMix.gain.setTargetAtTime(Math.cos(t*Math.PI/2), ctx.currentTime, 0.06);
-    const rainLevel = Math.sin(t*Math.PI/2);
+    const catLevel = parseFloat(catVolSlider.value)/100;
+    const rainLevel = parseFloat(rainVolSlider.value)/100;
+    nodes.catMix.gain.setTargetAtTime(catLevel, ctx.currentTime, 0.06);
     nodes.rainMix.gain.setTargetAtTime(rainLevel, ctx.currentTime, 0.06);
     nodes.dropBus.gain.setTargetAtTime(rainLevel, ctx.currentTime, 0.06);
   }
@@ -781,6 +823,8 @@
     if(dropTimerB) clearTimeout(dropTimerB);
     purrScheduler = slowTimer = dropTimerA = dropTimerB = null;
     if(ctx){ ctx.close(); }
+    bgSink.pause();
+    bgSink.srcObject = null;
     ctx = null; nodes = {}; purrCycles = [];
   }
 
@@ -795,18 +839,53 @@
       playBtn.classList.add('playing');
       orbIcon.innerHTML = ICON_PAUSE;
       stateText.textContent = 'Odtwarzane';
+      if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
     } else {
       teardown();
       playing = false;
       playBtn.classList.remove('playing');
       orbIcon.innerHTML = ICON_PLAY;
       stateText.textContent = 'Zatrzymane';
+      if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
     }
   });
 
-  mixSlider.addEventListener('input', () => {
-    el('mixVal').textContent = (100 - mixSlider.value) + ' / ' + mixSlider.value;
+  // Lets Android/desktop lock-screen and notification media controls
+  // start/stop playback, and marks the tab as playing media.
+  if('mediaSession' in navigator){
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: 'Przechył',
+      artist: 'mruczenie i deszcz'
+    });
+    navigator.mediaSession.setActionHandler('play', () => { if(!playing) playBtn.click(); });
+    navigator.mediaSession.setActionHandler('pause', () => { if(playing) playBtn.click(); });
+  }
+
+  // Some browsers still suspend the AudioContext itself on backgrounding;
+  // resume it as soon as the tab is visible/foregrounded again.
+  document.addEventListener('visibilitychange', () => {
+    if(document.visibilityState === 'visible' && ctx && ctx.state === 'suspended'){
+      ctx.resume();
+    }
+  });
+
+  catVolSlider.addEventListener('input', () => {
+    el('catVolVal').textContent = catVolSlider.value + '%';
     applyMix();
+  });
+
+  rainVolSlider.addEventListener('input', () => {
+    el('rainVolVal').textContent = rainVolSlider.value + '%';
+    applyMix();
+  });
+
+  document.getElementById('presetRow').addEventListener('click', (e) => {
+    const btn = e.target.closest('.preset-btn');
+    if(!btn) return;
+    catVolSlider.value = btn.dataset.cat;
+    rainVolSlider.value = btn.dataset.rain;
+    catVolSlider.dispatchEvent(new Event('input'));
+    rainVolSlider.dispatchEvent(new Event('input'));
   });
 
   panSlider.addEventListener('input', () => {
