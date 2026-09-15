@@ -10,6 +10,9 @@ permissions:
   pages: write
   id-token: write
 
+env:
+  ACTIONS_RUNNER_FORCED_ACTIONS_NODE_VERSION: node24
+
 concurrency:
   group: pages
   cancel-in-progress: false
