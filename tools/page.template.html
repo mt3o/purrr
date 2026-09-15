@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Przechył — dźwięki bilateralne</title>
+<style>
+  :root{
+    --ink: #ece7f5;
+    --ink-dim: #b5accb;
+    --ink-faint: #857aa0;
+    --accent: #e8a76b;
+    --accent-soft: rgba(232,167,107,0.3);
+    --panel: rgba(22,17,38,0.5);
+    --line: rgba(255,255,255,0.08);
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; min-height:100%; }
+  body{
+    font-family:'Iowan Old Style','Palatino Linotype',Georgia,serif;
+    color:var(--ink);
+    background:#0d0a18;
+    min-height:100vh;
+    display:flex; align-items:center; justify-content:center;
+    padding:6vh 5vw;
+  }
+
+  .sky{
+    position:fixed; inset:0; z-index:-2;
+    background:
+      radial-gradient(ellipse 80% 60% at 20% 20%, rgba(92,62,142,0.5), transparent 60%),
+      radial-gradient(ellipse 70% 60% at 80% 30%, rgba(38,88,120,0.45), transparent 60%),
+      radial-gradient(ellipse 90% 70% at 50% 85%, rgba(118,58,88,0.42), transparent 65%),
+      linear-gradient(180deg,#100c1e 0%,#0a0814 100%);
+    background-size:200% 200%,200% 200%,200% 200%,100% 100%;
+    animation:drift 30s ease-in-out infinite;
+  }
+  .sky::after{
+    content:""; position:absolute; inset:0;
+    background:radial-gradient(ellipse 120% 120% at 50% 50%, transparent 42%, rgba(5,4,10,0.62) 100%);
+  }
+  @keyframes drift{
+    0%{background-position:20% 30%,80% 20%,40% 90%,0 0;}
+    50%{background-position:42% 62%,58% 48%,62% 68%,0 0;}
+    100%{background-position:20% 30%,80% 20%,40% 90%,0 0;}
+  }
+  @media (prefers-reduced-motion:reduce){ .sky{animation:none;} }
+
+  .stage{ width:100%; max-width:580px; }
+
+  .eyebrow{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    font-size:0.78rem; color:var(--ink-faint); margin:0 0 0.6rem;
+  }
+  h1{
+    font-weight:400; font-size:clamp(1.9rem,5.5vw,2.6rem);
+    line-height:1.16; margin:0 0 0.9rem;
+  }
+  h1 em{ font-style:italic; color:var(--accent); }
+  p.lede{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    color:var(--ink-dim); font-size:0.96rem; line-height:1.55;
+    max-width:46ch; margin:0 0 2.2rem;
+  }
+
+  .orb-row{ display:flex; align-items:center; gap:1.5rem; margin-bottom:2.2rem; }
+  .orb{
+    position:relative; width:104px; height:104px; flex-shrink:0;
+    border-radius:50%; border:none; cursor:pointer;
+    background:radial-gradient(circle at 35% 30%, rgba(255,255,255,0.22), rgba(232,167,107,0.14) 45%, rgba(232,167,107,0.02) 72%);
+    box-shadow:0 0 0 1px var(--line), inset 0 0 28px rgba(232,167,107,0.07);
+    transition:box-shadow .4s ease;
+  }
+  .orb:focus-visible{ outline:2px solid var(--accent); outline-offset:6px; }
+  .orb::before{
+    content:""; position:absolute; inset:-14px; border-radius:50%;
+    border:1px solid var(--accent-soft); opacity:0; transition:opacity .4s ease;
+  }
+  .orb.playing::before{ opacity:1; animation:ring 3.4s ease-in-out infinite; }
+  .orb.playing{ box-shadow:0 0 0 1px var(--line), inset 0 0 40px rgba(232,167,107,0.2), 0 0 42px rgba(232,167,107,0.1); }
+  @keyframes ring{
+    0%,100%{ transform:scale(1); opacity:.5; }
+    50%{ transform:scale(1.17); opacity:.12; }
+  }
+  @media (prefers-reduced-motion:reduce){ .orb.playing::before{animation:none;opacity:.4;} }
+
+  .orb-icon{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; color:var(--ink); }
+  .orb-icon svg{ width:25px; height:25px; }
+  .orb-caption{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+  .orb-caption .state{ font-size:1rem; margin-bottom:.22rem; }
+  .orb-caption .hint{ font-size:.81rem; color:var(--ink-faint); }
+
+  .panel{
+    background:var(--panel); border:1px solid var(--line);
+    border-radius:18px; padding:1.5rem 1.6rem 1.7rem;
+    backdrop-filter:blur(14px);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  .group + .group{ margin-top:1.6rem; padding-top:1.5rem; border-top:1px solid var(--line); }
+  .group-name{ font-size:.8rem; color:var(--ink-faint); margin-bottom:1.05rem; }
+
+  .control{ margin-bottom:1.25rem; }
+  .control:last-child{ margin-bottom:0; }
+  .control-label{
+    display:flex; justify-content:space-between;
+    font-size:.82rem; color:var(--ink-dim); margin-bottom:.5rem;
+  }
+  .control-label .val{ color:var(--ink-faint); font-variant-numeric:tabular-nums; }
+
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; width:100%; height:3px;
+    border-radius:2px; background:rgba(255,255,255,.14); outline:none;
+  }
+  input[type=range]:focus-visible{ box-shadow:0 0 0 2px var(--accent-soft); }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:15px; height:15px; border-radius:50%;
+    background:var(--accent); cursor:pointer; margin-top:-6px;
+    box-shadow:0 0 8px rgba(232,167,107,.45);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:15px; height:15px; border:none; border-radius:50%;
+    background:var(--accent); cursor:pointer; box-shadow:0 0 8px rgba(232,167,107,.45);
+  }
+  input[type=range]::-moz-range-track{ height:3px; background:rgba(255,255,255,.14); border-radius:2px; }
+
+  .ends{ display:flex; justify-content:space-between; font-size:.75rem; color:var(--ink-faint); margin-top:.36rem; }
+
+  .footnote{
+    display:flex; gap:.6rem; margin-top:1.8rem;
+    font-size:.79rem; color:var(--ink-faint); line-height:1.5;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  .footnote svg{ flex-shrink:0; margin-top:2px; opacity:.7; }
+</style>
+</head>
+<body>
+
+<div class="sky"></div>
+
+<div class="stage">
+  <p class="eyebrow">generator dźwięku · panning bilateralny</p>
+  <h1>Deszcz i mruczenie, <em>przechylane</em> między uszami.</h1>
+  <p class="lede">
+    Dwa źródła syntezowane w czasie rzeczywistym — mruczenie modelowane jako
+    impulsy krtaniowe w rezonatorze, deszcz jako warstwy kropli nad szumowym tłem.
+    Nic się nie zapętla. Słuchaj na słuchawkach.
+  </p>
+
+  <div class="orb-row">
+    <button class="orb" id="playBtn" aria-label="Odtwórz lub zatrzymaj">
+      <span class="orb-icon" id="orbIcon">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+      </span>
+    </button>
+    <div class="orb-caption">
+      <div class="state" id="stateText">Zatrzymane</div>
+      <div class="hint">Dotknij, aby zacząć</div>
+    </div>
+  </div>
+
+  <div class="panel">
+
+    <div class="group">
+      <div class="group-name">Miks i przestrzeń</div>
+
+      <div class="control">
+        <div class="control-label"><span>Kot ↔ Deszcz</span><span class="val" id="mixVal">50 / 50</span></div>
+        <input type="range" id="mixSlider" min="0" max="100" value="50">
+        <div class="ends"><span>mruczenie</span><span>deszcz</span></div>
+      </div>
+
+      <div class="control">
+        <div class="control-label"><span>Tempo przechyłu</span><span class="val" id="panVal">0.50 Hz</span></div>
+        <input type="range" id="panSlider" min="20" max="120" value="50">
+      </div>
+
+      <div class="control">
+        <div class="control-label"><span>Pozostałość w drugim kanale</span><span class="val" id="depthVal">10%</span></div>
+        <input type="range" id="depthSlider" min="0" max="70" value="10">
+        <div class="ends"><span>pełne rozdzielenie</span><span>prawie środek</span></div>
+      </div>
+
+      <div class="control">
+        <div class="control-label"><span>Charakter przejścia</span><span class="val" id="shapeVal">płynne</span></div>
+        <input type="range" id="shapeSlider" min="0" max="100" value="15">
+        <div class="ends"><span>gładkie</span><span>skokowe</span></div>
+      </div>
+
+      <div class="control">
+        <div class="control-label"><span>Głośność</span><span class="val" id="volVal">70%</span></div>
+        <input type="range" id="volSlider" min="0" max="100" value="70">
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="group-name">Kot</div>
+
+      <div class="control">
+        <div class="control-label"><span>Nastrój</span><span class="val" id="moodVal">wyciszony</span></div>
+        <input type="range" id="moodSlider" min="0" max="100" value="35">
+        <div class="ends"><span>senny</span><span>zadowolony</span></div>
+      </div>
+
+      <div class="control">
+        <div class="control-label"><span>Odległość</span><span class="val" id="distVal">na kolanach</span></div>
+        <input type="range" id="distSlider" min="0" max="100" value="25">
+        <div class="ends"><span>blisko</span><span>daleko</span></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="group-name">Deszcz</div>
+
+      <div class="control">
+        <div class="control-label"><span>Intensywność</span><span class="val" id="rainVal">równy deszcz</span></div>
+        <input type="range" id="rainSlider" min="0" max="100" value="45">
+        <div class="ends"><span>mżawka</span><span>ulewa</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footnote">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+    <span>To narzędzie relaksacyjne, nie terapia. Nie zastępuje EMDR prowadzonego przez terapeutę.</span>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* ---------------------------------------------------------------
+     State
+  --------------------------------------------------------------- */
+  let ctx = null;
+  let playing = false;
+  let nodes = {};           // long-lived audio nodes
+  let purrCycles = [];      // pregenerated AudioBuffers
+  let purrScheduler = null;
+  let purrNextTime = 0;
+  let dropTimerA = null, dropTimerB = null;
+  let slowPhase = 0;        // long-term variation phase
+  let slowTimer = null;
+
+  const el = id => document.getElementById(id);
+  const playBtn   = el('playBtn');
+  const orbIcon   = el('orbIcon');
+  const stateText = el('stateText');
+
+  const mixSlider   = el('mixSlider');
+  const panSlider   = el('panSlider');
+  const depthSlider = el('depthSlider');
+  const shapeSlider = el('shapeSlider');
+  const volSlider   = el('volSlider');
+  const moodSlider  = el('moodSlider');
+  const distSlider  = el('distSlider');
+  const rainSlider  = el('rainSlider');
+
+  const ICON_PLAY  = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+  const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
+
+  const clamp = (v,a,b) => Math.min(b, Math.max(a, v));
+  const lerp  = (a,b,t) => a + (b-a)*t;
+
+  /* ---------------------------------------------------------------
+     Noise buffers
+  --------------------------------------------------------------- */
+  function whiteBuffer(seconds){
+    const n = Math.floor(ctx.sampleRate * seconds);
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for(let i=0;i<n;i++) d[i] = Math.random()*2 - 1;
+    return buf;
+  }
+
+  function pinkBuffer(seconds){
+    const n = Math.floor(ctx.sampleRate * seconds);
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+    for(let i=0;i<n;i++){
+      const w = Math.random()*2 - 1;
+      b0 = 0.99886*b0 + w*0.0555179;
+      b1 = 0.99332*b1 + w*0.0750759;
+      b2 = 0.96900*b2 + w*0.1538520;
+      b3 = 0.86650*b3 + w*0.3104856;
+      b4 = 0.55000*b4 + w*0.5329522;
+      b5 = -0.7616*b5 - w*0.0168980;
+      d[i] = (b0+b1+b2+b3+b4+b5+b6 + w*0.5362) * 0.11;
+      b6 = w*0.115926;
+    }
+    // taper the loop seam so a long loop doesn't click
+    const fade = Math.floor(ctx.sampleRate * 0.05);
+    for(let i=0;i<fade;i++){
+      const g = i/fade;
+      d[i] *= g;
+      d[n-1-i] *= g;
+    }
+    return buf;
+  }
+
+  /* ---------------------------------------------------------------
+     Purr cycle synthesis  (v3)
+
+     One buffer = one full exhale/inhale cycle.
+
+       excitation : Rosenberg-shaped glottal pulses (not unit impulses),
+                    with jitter (timing) AND shimmer (amplitude), plus a
+                    pitch contour inside each breath phase
+       resonance  : parallel bank of 5 formants (chest / tract / nasal),
+                    each with its own bandwidth and amplitude
+       breath     : noise fed through the SAME formant bank so it sits in
+                    the same acoustic space as the voiced part
+       envelope   : t·e^(−kt) — fast attack, long tail — not a sine
+  --------------------------------------------------------------- */
+
+  /* Rosenberg glottal pulse: rising half-cosine, then a quarter-cosine
+     fall. Open-phase fraction controls brightness — a wider pulse is
+     darker, a narrow one is buzzier. */
+  function rosenbergPulse(sr, f0, openFrac, riseFrac){
+    const period = sr / f0;
+    const open   = Math.max(4, Math.floor(period * openFrac));
+    const t1     = Math.max(2, Math.floor(open * riseFrac));   // rise samples
+    const t2     = Math.max(2, open - t1);                     // fall samples
+    const p = new Float32Array(open);
+    for(let i=0;i<t1;i++){
+      p[i] = 0.5 * (1 - Math.cos(Math.PI * i / t1));
+    }
+    for(let i=0;i<t2;i++){
+      p[t1+i] = Math.cos(Math.PI * i / (2*t2));
+    }
+    // differentiate: the radiated signal is ~dg/dt, which is what gives
+    // the pulse its characteristic asymmetric bite
+    const d = new Float32Array(open);
+    for(let i=1;i<open;i++) d[i] = p[i] - p[i-1];
+    // differentiation scales with 1/period, so a low-f0 pulse comes out
+    // very quiet — normalise to unit peak or the breath noise swamps it
+    let pk = 0;
+    for(let i=0;i<open;i++) pk = Math.max(pk, Math.abs(d[i]));
+    if(pk > 0){ for(let i=0;i<open;i++) d[i] /= pk; }
+    return d;
+  }
+
+  /* One parallel formant: 2-pole resonator specified by centre frequency
+     and bandwidth (bandwidth, not a bare "q" — it maps to a real decay). */
+  function formantInto(dst, src, freq, bw, amp, sr){
+    const r = Math.exp(-Math.PI * bw / sr);
+    const theta = 2*Math.PI*freq/sr;
+    const a1 = 2*r*Math.cos(theta);
+    const a2 = -(r*r);
+    // normalise so each formant contributes at a comparable level
+    const g = (1 - r) * Math.sqrt(1 - 2*r*Math.cos(2*theta) + r*r);
+    let y1=0, y2=0;
+    for(let i=0;i<src.length;i++){
+      const y = g*src[i] + a1*y1 + a2*y2;
+      dst[i] += y * amp;
+      y2 = y1; y1 = y;
+    }
+  }
+
+  function buildPurrCycle(opts){
+    const sr = ctx.sampleRate;
+    const n  = Math.floor(sr * opts.duration);
+    const buf = ctx.createBuffer(1, n, sr);
+    const out = buf.getChannelData(0);
+
+    const exhaleEnd = Math.floor(n * 0.60);   // exhale runs longer than inhale
+
+    /* ---------- excitation ---------- */
+    const voiced = new Float32Array(n);
+    const breath = new Float32Array(n);
+
+    // cache pulse shapes per f0 bucket so we don't rebuild them constantly
+    const pulseCache = new Map();
+    const getPulse = (f0, openFrac) => {
+      const key = (f0*4|0) + ':' + (openFrac*100|0);
+      let p = pulseCache.get(key);
+      if(!p){ p = rosenbergPulse(sr, f0, openFrac, 0.62); pulseCache.set(key, p); }
+      return p;
+    };
+
+    let nextPulseAt = 0;
+    for(let i=0;i<n;i++){
+      const inExhale = i < exhaleEnd;
+      const t = inExhale ? i/exhaleEnd : (i-exhaleEnd)/(n-exhaleEnd);
+
+      // pitch contour inside the phase: rises early, sags at the end
+      let contour;
+      if(inExhale){
+        contour = 1 + 0.045*Math.sin(Math.PI*Math.pow(t,0.7)) - 0.055*Math.pow(t,2.6);
+      } else {
+        contour = 1.10 + 0.03*Math.sin(Math.PI*t) - 0.04*Math.pow(t,2.2);
+      }
+
+      // breath noise, shaped later by the same formants
+      breath[i] = (Math.random()*2-1) * opts.noise * (inExhale ? 1.0 : 1.35);
+
+      if(i >= nextPulseAt){
+        const f0 = opts.f0 * contour;
+        // jitter: cycle-to-cycle timing irregularity (~4%)
+        const jitter = 1 + (Math.random()-0.5)*0.045;
+        // shimmer: cycle-to-cycle amplitude irregularity (~9%)
+        const shimmer = 1 + (Math.random()-0.5)*0.18;
+
+        const openFrac = inExhale ? opts.openFrac : opts.openFrac*0.85;
+        const p = getPulse(f0, openFrac);
+        const amp = (inExhale ? 1.0 : 0.68) * shimmer;
+
+        for(let k=0; k<p.length && i+k<n; k++) voiced[i+k] += p[k]*amp;
+
+        nextPulseAt = i + Math.max(p.length+1, Math.round(sr/(f0*jitter)));
+      }
+    }
+
+    /* ---------- parallel formant bank ---------- */
+    // F1 chest/body, F2-F3 tract, F4-F5 upper texture
+    const F = opts.formants;
+    const voicedOut = new Float32Array(n);
+    const breathOut = new Float32Array(n);
+    for(const f of F){
+      formantInto(voicedOut, voiced, f.f, f.bw, f.a, sr);
+      // breath gets the same formants, slightly wider (less resonant)
+      formantInto(breathOut, breath, f.f, f.bw*1.8, f.a*0.8, sr);
+    }
+
+    /* ---------- envelope: t·e^(−kt), fast attack, long tail ---------- */
+    const shape = (t, k) => {
+      const v = t * Math.exp(-k*t);
+      const peakT = 1/k;
+      const peakV = peakT * Math.exp(-1);
+      return peakV > 0 ? v/peakV : 0;
+    };
+
+    for(let i=0;i<n;i++){
+      let env;
+      if(i < exhaleEnd){
+        env = shape(i/exhaleEnd, 2.6);
+      } else {
+        env = shape((i-exhaleEnd)/(n-exhaleEnd), 3.2) * 0.6;
+      }
+      // never let the tail hit exactly zero — a real cat doesn't go silent
+      env = env*0.94 + 0.06;
+      out[i] = (voicedOut[i] + breathOut[i]) * env;
+    }
+
+    /* ---------- gentle DC block ---------- */
+    let x1=0, y1=0;
+    for(let i=0;i<n;i++){
+      const x = out[i];
+      const y = x - x1 + 0.995*y1;
+      out[i] = y; x1 = x; y1 = y;
+    }
+
+    /* ---------- normalise ---------- */
+    let peak = 0;
+    for(let i=0;i<n;i++) peak = Math.max(peak, Math.abs(out[i]));
+    if(peak > 0){
+      const g = 0.55/peak;
+      for(let i=0;i<n;i++) out[i] *= g;
+    }
+
+    /* ---------- taper the joins ---------- */
+    const edge = Math.floor(sr*0.015);
+    for(let i=0;i<edge;i++){
+      const g = i/edge;
+      out[i] *= g;
+      out[n-1-i] *= g;
+    }
+
+    return buf;
+  }
+
+  /* Formant set for a domestic cat's purr. Low formants carry the chest
+     resonance — those are what make it feel like a body, not a buzzer. */
+  function catFormants(mood, wobble){
+    const shift = lerp(0.94, 1.10, mood);   // happier cat = tighter, brighter
+    const w = f => f * shift * (1 + wobble*0.04);
+    return [
+      { f: w(158),  bw: 55,  a: 1.00 },   // chest / body
+      { f: w(390),  bw: 85,  a: 0.62 },   // lower tract
+      { f: w(830),  bw: 140, a: 0.34 },   // upper tract
+      { f: w(1650), bw: 260, a: 0.22 },   // nasal texture
+      { f: w(2950), bw: 420, a: 0.13 }    // air / fur detail
+    ];
+  }
+
+  function regeneratePurrCycles(){
+    const mood = parseFloat(moodSlider.value)/100;   // 0 sleepy .. 1 happy
+    purrCycles = [];
+    // six variants, randomly picked each cycle -> no audible repetition
+    for(let v=0; v<6; v++){
+      const wobble = (Math.random()-0.5);
+      purrCycles.push(buildPurrCycle({
+        duration: lerp(2.05, 1.35, mood) + wobble*0.12,
+        f0:       lerp(21, 29, mood)     + wobble*1.1,
+        noise:    lerp(0.09, 0.22, mood),
+        // wider open phase = darker, rounder pulse; sleepy cats are darker
+        openFrac: lerp(0.34, 0.22, mood) + wobble*0.02,
+        formants: catFormants(mood, wobble)
+      }));
+    }
+  }
+
+  function schedulePurr(){
+    if(!ctx || !purrCycles.length) return;
+    const lookahead = 0.35;
+    while(purrNextTime < ctx.currentTime + lookahead){
+      const buf = purrCycles[(Math.random()*purrCycles.length)|0];
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      // tiny per-cycle detune keeps successive cycles from matching exactly
+      src.playbackRate.value = 1 + (Math.random()-0.5)*0.035;
+      src.connect(nodes.purrBus);
+      const start = Math.max(purrNextTime, ctx.currentTime + 0.02);
+      src.start(start);
+      // overlap slightly so cycles breathe into each other
+      purrNextTime = start + (buf.duration / src.playbackRate.value) - 0.03;
+    }
+  }
+
+  /* ---------------------------------------------------------------
+     Rain
+  --------------------------------------------------------------- */
+  function scheduleDroplet(layer){
+    if(!ctx) return;
+    const intensity = parseFloat(rainSlider.value)/100;
+    // slow breathing of the shower's density
+    const breath = 1 + 0.3*Math.sin(slowPhase * 2.1);
+
+    const src = ctx.createBufferSource();
+    src.buffer = nodes.dropBuf;
+
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+
+    const g = ctx.createGain();
+    const now = ctx.currentTime;
+
+    let peak, decay;
+    if(layer === 'A'){
+      // fine droplets — bright, short
+      bp.frequency.value = 2000 + Math.random()*4000;
+      bp.Q.value = 3 + Math.random()*5;
+      peak  = (0.05 + Math.random()*0.07) * lerp(0.6, 1.25, intensity);
+      decay = 0.015 + Math.random()*0.025;
+    } else {
+      // fat droplets on leaves / sill — darker, longer
+      bp.frequency.value = 400 + Math.random()*800;
+      bp.Q.value = 5 + Math.random()*6;
+      peak  = (0.07 + Math.random()*0.09) * lerp(0.5, 1.35, intensity);
+      decay = 0.06 + Math.random()*0.09;
+    }
+
+    g.gain.setValueAtTime(0, now);
+    g.gain.linearRampToValueAtTime(peak, now + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0008, now + decay);
+
+    src.connect(bp); bp.connect(g); g.connect(nodes.dropBus);
+    src.start(now);
+    src.stop(now + decay + 0.05);
+
+    // shared density: both layers scale off the same intensity + breath
+    const baseGap = layer === 'A'
+      ? lerp(90, 11, intensity)
+      : lerp(340, 55, intensity);
+    const gap = (baseGap / breath) * (0.45 + Math.random()*1.15);
+
+    const t = setTimeout(() => scheduleDroplet(layer), gap);
+    if(layer === 'A') dropTimerA = t; else dropTimerB = t;
+  }
+
+  /* ---------------------------------------------------------------
+     Pan geometry
+
+     StereoPannerNode uses an equal-power law: at pan p the near channel
+     gets sin((p+1)·π/4) and the far channel cos((p+1)·π/4). So "how much
+     is left in the other channel" maps back to a pan excursion through
+     acos(). The slider is phrased in what you actually hear (the residue),
+     not in the raw pan value.
+  --------------------------------------------------------------- */
+  function excursionFromRemainder(r){
+    r = clamp(r, 0, 0.7071);
+    return clamp(Math.acos(r) * 4/Math.PI - 1, 0, 1);
+  }
+
+  /* Bends a sine towards a square. k≈0 leaves it untouched; large k drives
+     it into saturation so the swing snaps between sides instead of gliding.
+     k rises with the square of the slider — a linear mapping saturated by
+     the halfway point and wasted the top half of the travel. */
+  function buildShapeCurve(shape){
+    const N = 1024;
+    const curve = new Float32Array(N);
+    const k = shape * shape * 25;
+    const norm = k > 0.001 ? Math.tanh(k) : 1;
+    for(let i=0;i<N;i++){
+      const x = (i/(N-1))*2 - 1;
+      curve[i] = k > 0.001 ? Math.tanh(k*x)/norm : x;
+    }
+    return curve;
+  }
+
+  /* ---------------------------------------------------------------
+     Graph
+  --------------------------------------------------------------- */
+  function buildGraph(){
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+    nodes.master = ctx.createGain();
+    nodes.master.gain.value = parseFloat(volSlider.value)/100;
+    nodes.master.connect(ctx.destination);
+
+    // panner carries the cat and the droplets only — the rain bed stays put
+    nodes.panner = ctx.createStereoPanner();
+    nodes.panner.connect(nodes.master);
+
+    nodes.lfo = ctx.createOscillator();
+    nodes.lfo.type = 'sine';
+    nodes.lfo.frequency.value = parseFloat(panSlider.value)/100;
+
+    // Waveshaper bends the LFO from a smooth sine towards a near-square,
+    // so the swing can be a slow drift or an abrupt side-to-side switch.
+    nodes.lfoShaper = ctx.createWaveShaper();
+    nodes.lfoShaper.curve = buildShapeCurve(parseFloat(shapeSlider.value)/100);
+
+    nodes.lfoGain = ctx.createGain();
+    nodes.lfoGain.gain.value = excursionFromRemainder(parseFloat(depthSlider.value)/100);
+
+    nodes.lfo.connect(nodes.lfoShaper);
+    nodes.lfoShaper.connect(nodes.lfoGain);
+    nodes.lfoGain.connect(nodes.panner.pan);
+    nodes.lfo.start();
+
+    /* --- cat chain --- */
+    nodes.catMix = ctx.createGain();          // mix slider
+    nodes.catDist = ctx.createGain();         // distance slider (level part)
+    nodes.purrLP = ctx.createBiquadFilter();  // distance slider (tone part)
+    nodes.purrLP.type = 'lowpass';
+    nodes.purrBus = ctx.createGain();
+    nodes.purrBus.gain.value = 1;
+
+    nodes.purrBus.connect(nodes.purrLP);
+    nodes.purrLP.connect(nodes.catDist);
+    nodes.catDist.connect(nodes.catMix);
+    nodes.catMix.connect(nodes.panner);
+
+    /* --- rain bed: static, wide, unpanned --- */
+    nodes.rainMix = ctx.createGain();
+    nodes.rainMix.connect(nodes.master);
+
+    nodes.bedSrc = ctx.createBufferSource();
+    nodes.bedSrc.buffer = pinkBuffer(10);     // long loop, seam is tapered
+    nodes.bedSrc.loop = true;
+
+    const bedHP = ctx.createBiquadFilter();
+    bedHP.type = 'highpass'; bedHP.frequency.value = 450;
+    nodes.bedLP = ctx.createBiquadFilter();
+    nodes.bedLP.type = 'lowpass'; nodes.bedLP.frequency.value = 3400;
+    nodes.bedGain = ctx.createGain();
+    nodes.bedGain.gain.value = 0.3;
+
+    nodes.bedSrc.connect(bedHP);
+    bedHP.connect(nodes.bedLP);
+    nodes.bedLP.connect(nodes.bedGain);
+    nodes.bedGain.connect(nodes.rainMix);
+    nodes.bedSrc.start();
+
+    /* --- droplets: panned, with a short feedback delay for depth --- */
+    nodes.dropBus = ctx.createGain();
+    nodes.dropBuf = whiteBuffer(0.05);
+
+    const delay = ctx.createDelay(0.5);
+    delay.delayTime.value = 0.045;
+    const fb = ctx.createGain();
+    fb.gain.value = 0.25;
+    const wet = ctx.createGain();
+    wet.gain.value = 0.35;
+
+    nodes.dropBus.connect(nodes.panner);      // dry
+    nodes.dropBus.connect(delay);
+    delay.connect(fb); fb.connect(delay);
+    delay.connect(wet);
+    wet.connect(nodes.panner);                // wet
+
+    nodes.dropMix = nodes.dropBus;
+
+    applyMix();
+    applyDistance();
+
+    // pregenerate cycles, then start the schedulers
+    regeneratePurrCycles();
+    purrNextTime = ctx.currentTime + 0.1;
+    schedulePurr();
+    purrScheduler = setInterval(schedulePurr, 100);
+
+    scheduleDroplet('A');
+    scheduleDroplet('B');
+
+    // long-term drift: ~90 s period, nudges pan depth and purr level.
+    // It modulates *around* whatever depth the user set, never overrides it.
+    slowTimer = setInterval(() => {
+      slowPhase += 0.25/90 * 2*Math.PI;
+      if(!ctx) return;
+      const d = Math.sin(slowPhase);
+      const base = excursionFromRemainder(parseFloat(depthSlider.value)/100);
+      nodes.lfoGain.gain.setTargetAtTime(base * (1 + d*0.07), ctx.currentTime, 1.5);
+      nodes.purrBus.gain.setTargetAtTime(1 + d*0.07, ctx.currentTime, 2.0);
+    }, 250);
+  }
+
+  function applyMix(){
+    if(!ctx) return;
+    const t = parseFloat(mixSlider.value)/100;   // 0 cat .. 1 rain
+    nodes.catMix.gain.setTargetAtTime(Math.cos(t*Math.PI/2), ctx.currentTime, 0.06);
+    const rainLevel = Math.sin(t*Math.PI/2);
+    nodes.rainMix.gain.setTargetAtTime(rainLevel, ctx.currentTime, 0.06);
+    nodes.dropBus.gain.setTargetAtTime(rainLevel, ctx.currentTime, 0.06);
+  }
+
+  function applyDistance(){
+    if(!ctx) return;
+    const d = parseFloat(distSlider.value)/100;   // 0 close .. 1 distant
+    nodes.purrLP.frequency.setTargetAtTime(lerp(520, 150, d), ctx.currentTime, 0.1);
+    nodes.catDist.gain.setTargetAtTime(lerp(1.0, 0.38, d), ctx.currentTime, 0.1);
+  }
+
+  function applyRainTone(){
+    if(!ctx) return;
+    const i = parseFloat(rainSlider.value)/100;
+    nodes.bedLP.frequency.setTargetAtTime(lerp(1800, 6000, i), ctx.currentTime, 0.3);
+    nodes.bedGain.gain.setTargetAtTime(lerp(0.16, 0.42, i), ctx.currentTime, 0.3);
+  }
+
+  function teardown(){
+    if(purrScheduler) clearInterval(purrScheduler);
+    if(slowTimer) clearInterval(slowTimer);
+    if(dropTimerA) clearTimeout(dropTimerA);
+    if(dropTimerB) clearTimeout(dropTimerB);
+    purrScheduler = slowTimer = dropTimerA = dropTimerB = null;
+    if(ctx){ ctx.close(); }
+    ctx = null; nodes = {}; purrCycles = [];
+  }
+
+  /* ---------------------------------------------------------------
+     UI
+  --------------------------------------------------------------- */
+  playBtn.addEventListener('click', () => {
+    if(!playing){
+      buildGraph();
+      applyRainTone();
+      playing = true;
+      playBtn.classList.add('playing');
+      orbIcon.innerHTML = ICON_PAUSE;
+      stateText.textContent = 'Odtwarzane';
+    } else {
+      teardown();
+      playing = false;
+      playBtn.classList.remove('playing');
+      orbIcon.innerHTML = ICON_PLAY;
+      stateText.textContent = 'Zatrzymane';
+    }
+  });
+
+  mixSlider.addEventListener('input', () => {
+    el('mixVal').textContent = (100 - mixSlider.value) + ' / ' + mixSlider.value;
+    applyMix();
+  });
+
+  panSlider.addEventListener('input', () => {
+    const hz = parseFloat(panSlider.value)/100;
+    el('panVal').textContent = hz.toFixed(2) + ' Hz';
+    if(ctx) nodes.lfo.frequency.setTargetAtTime(hz, ctx.currentTime, 0.15);
+  });
+
+  depthSlider.addEventListener('input', () => {
+    const r = parseFloat(depthSlider.value)/100;
+    el('depthVal').textContent = Math.round(r*100) + '%';
+    if(ctx){
+      nodes.lfoGain.gain.setTargetAtTime(excursionFromRemainder(r), ctx.currentTime, 0.2);
+    }
+  });
+
+  const SHAPES = ['gładkie','płynne','wyraźne','ostre','skokowe'];
+  shapeSlider.addEventListener('input', () => {
+    const v = parseFloat(shapeSlider.value)/100;
+    el('shapeVal').textContent = SHAPES[clamp(Math.floor(v*SHAPES.length), 0, SHAPES.length-1)];
+    if(ctx) nodes.lfoShaper.curve = buildShapeCurve(v);
+  });
+
+  volSlider.addEventListener('input', () => {
+    el('volVal').textContent = volSlider.value + '%';
+    if(ctx) nodes.master.gain.setTargetAtTime(parseFloat(volSlider.value)/100, ctx.currentTime, 0.05);
+  });
+
+  const MOODS = ['głęboko śpiący','wyciszony','spokojny','zadowolony','rozanielony'];
+  moodSlider.addEventListener('input', () => {
+    const v = parseFloat(moodSlider.value)/100;
+    el('moodVal').textContent = MOODS[clamp(Math.floor(v*MOODS.length), 0, MOODS.length-1)];
+  });
+  // regenerating buffers is heavy — do it once the slider settles
+  moodSlider.addEventListener('change', () => { if(ctx) regeneratePurrCycles(); });
+
+  const DISTS = ['na kolanach','obok','w pokoju','za ścianą'];
+  distSlider.addEventListener('input', () => {
+    const v = parseFloat(distSlider.value)/100;
+    el('distVal').textContent = DISTS[clamp(Math.floor(v*DISTS.length), 0, DISTS.length-1)];
+    applyDistance();
+  });
+
+  const RAINS = ['mżawka','lekki deszcz','równy deszcz','rzęsisty','ulewa'];
+  rainSlider.addEventListener('input', () => {
+    const v = parseFloat(rainSlider.value)/100;
+    el('rainVal').textContent = RAINS[clamp(Math.floor(v*RAINS.length), 0, RAINS.length-1)];
+    applyRainTone();
+  });
+
+})();
+</script>
+
+</body>
+</html>

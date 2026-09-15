@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.DS_Store
+data/bank_audio.npy
+data/bank_b64.txt
+data/grains_raw.npy
+data/*.wav
+source-audio/nagranie.wav
