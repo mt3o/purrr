@@ -256,6 +256,8 @@
   </div>
 </div>
 
+<audio id="bgSink" playsinline style="display:none"></audio>
+
 <script>
 (function(){
   'use strict';
@@ -277,6 +279,7 @@
   const playBtn   = el('playBtn');
   const orbIcon   = el('orbIcon');
   const stateText = el('stateText');
+  const bgSink    = el('bgSink');
 
   const catVolSlider  = el('catVolSlider');
   const rainVolSlider = el('rainVolSlider');
@@ -571,7 +574,9 @@
 
   function schedulePurr(){
     if(!ctx || !purrCycles.length) return;
-    const lookahead = 0.35;
+    // Generous margin: background tabs can throttle setInterval down to
+    // ~1/s, so each tick needs enough lookahead to keep the timeline full.
+    const lookahead = 1.2;
     while(purrNextTime < ctx.currentTime + lookahead){
       const buf = purrCycles[(Math.random()*purrCycles.length)|0];
       const src = ctx.createBufferSource();
@@ -675,7 +680,19 @@
 
     nodes.master = ctx.createGain();
     nodes.master.gain.value = parseFloat(volSlider.value)/100;
-    nodes.master.connect(ctx.destination);
+
+    // Route through a real <audio> element rather than straight to the
+    // hardware sink: browsers exempt tabs playing through a media element
+    // from background-tab timer throttling and allow lock-screen/minimized
+    // playback, which a bare AudioContext does not get.
+    if(typeof ctx.createMediaStreamDestination === 'function'){
+      nodes.streamDest = ctx.createMediaStreamDestination();
+      nodes.master.connect(nodes.streamDest);
+      bgSink.srcObject = nodes.streamDest.stream;
+      bgSink.play().catch(() => {});
+    } else {
+      nodes.master.connect(ctx.destination);
+    }
 
     // panner carries the cat and the droplets only — the rain bed stays put
     nodes.panner = ctx.createStereoPanner();
@@ -806,6 +823,8 @@
     if(dropTimerB) clearTimeout(dropTimerB);
     purrScheduler = slowTimer = dropTimerA = dropTimerB = null;
     if(ctx){ ctx.close(); }
+    bgSink.pause();
+    bgSink.srcObject = null;
     ctx = null; nodes = {}; purrCycles = [];
   }
 
@@ -820,12 +839,33 @@
       playBtn.classList.add('playing');
       orbIcon.innerHTML = ICON_PAUSE;
       stateText.textContent = 'Odtwarzane';
+      if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
     } else {
       teardown();
       playing = false;
       playBtn.classList.remove('playing');
       orbIcon.innerHTML = ICON_PLAY;
       stateText.textContent = 'Zatrzymane';
+      if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
+    }
+  });
+
+  // Lets Android/desktop lock-screen and notification media controls
+  // start/stop playback, and marks the tab as playing media.
+  if('mediaSession' in navigator){
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: 'Przechył',
+      artist: 'mruczenie i deszcz'
+    });
+    navigator.mediaSession.setActionHandler('play', () => { if(!playing) playBtn.click(); });
+    navigator.mediaSession.setActionHandler('pause', () => { if(playing) playBtn.click(); });
+  }
+
+  // Some browsers still suspend the AudioContext itself on backgrounding;
+  // resume it as soon as the tab is visible/foregrounded again.
+  document.addEventListener('visibilitychange', () => {
+    if(document.visibilityState === 'visible' && ctx && ctx.state === 'suspended'){
+      ctx.resume();
     }
   });
 
